@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-%matplotlib inline
+
 from MDAnalysis.coordinates.XTC import XTCWriter
 from MDAnalysis.analysis import hydrogenbonds as hbonds
 import MDAnalysis as mda
