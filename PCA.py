@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-%matplotlib inline
 
 import MDAnalysis as mda
 from MDAnalysis.coordinates.chain import ChainReader
@@ -118,10 +117,112 @@ def load_structure(file_name):
     structure = parser.get_structure(file_name, file_name)
     atoms = [atom.get_name() for atom in structure.get_atoms()]
     return Counter(atoms)
-
+#%%
 # Load each PDB file
 structure1_atoms = load_structure('data/chainA.pdb')
 structure2_atoms = load_structure('data/chainC.pdb')
+
+# Compare the two sets of atoms
+if structure1_atoms == structure2_atoms:
+    print("The PDB files have the same atoms.")
+else:
+    print("The PDB files do NOT have the same atoms.")
+    missing_in_1 = structure2_atoms - structure1_atoms
+    missing_in_2 = structure1_atoms - structure2_atoms
+    if missing_in_1:
+        print("Atoms missing in file1:", missing_in_1)
+    if missing_in_2:
+        print("Atoms missing in file2:", missing_in_2)
+
+# %%
+u = mda.Universe('chainA-re53-noh.gro', 'ABC-3000f-noh-aligned.dcd')
+ref = mda.Universe('chainA-re53-noh.gro', 'ABC-3000f-noh-aligned.dcd')
+
+u.trajectory[-1]  # set mobile trajectory to last frame
+ref.trajectory[0]  # set reference trajectory to first frame
+
+u_ca = u.select_atoms('name CA')
+ref_ca = ref.select_atoms('name CA')
+unaligned_rmsd = rms.rmsd(u_ca.positions, ref_ca.positions, superposition=False)
+print(f"Unaligned RMSD: {unaligned_rmsd:.2f}")
+# %%
+# Align the trajectory and save the coordinates
+aligner = align.AlignTraj(u, ref, select='protein',
+                           filename='ABC-aligned.xtc').run()
+#%%
+import biobox as bb
+# %%
+# Set dir path
+path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
+
+try:
+    os.chdir(path)
+    print(f"Successfully changed the working directory to {path}")
+except Exception as e:
+    print(f"Error occurred while changing the working directory: {e}")
+#%%
+M = bb.Molecule()
+M.import_pdb('ABC-CA-aligned.pdb')
+
+# %%
+pc = M.pca(components = 2)
+# %%
+PC_values = np.arange(2) + 1
+plt.plot(PC_values, pc[1].explained_variance_ratio_, 'o-', linewidth=2, color='blue')
+plt.title('Scree Plot')
+plt.xlabel('Principal Component')
+plt.ylabel('Variance Explained')
+plt.show()
+
+# %%
+#pc = pca(n_components=2, svd_solver='arpack').fit(M)
+# %%
+import numpy as np
+
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.patches as mpatches
+
+
+projection = pc[0]
+
+# Generate labels for each class
+#labels = np.array(['monomer']*2918 + ['A']*1000 + ['B']*1000 + ['C']*1000)
+labels = np.array(['A']*1000 + ['B']*1000 + ['C']*1000)
+#labels = np.array(['monomer']*2918)
+#labels = np.array(['A']*999)
+#labels = np.array(['B']*1000 + ['C']*1000)
+
+# Colors for each class
+#color_map = {'A': 'orange', 'B': 'blue', 'C': 'green', 'monomer':'purple'}
+color_map = {'A': cm.Reds_r, 'B': cm.Blues_r, 'C': cm.Greens_r}
+#color_map = {'monomer':'purple'}
+#color_map = {'A': 'orange'}
+#color_map = {'B': 'blue', 'C': 'green'}
+
+# Plot each class
+for label in np.unique(labels):
+    # Indices for elements of the current class
+    indices = np.where(labels == label)[0]
+    # Scatter plot for the class
+    color_array = color_array = np.linspace(0, 1, indices.size)
+    plt.scatter(projection[indices,0], projection[indices,1], c=color_array,  cmap=color_map[label], label=label)
+legend_patches = [
+    mpatches.Patch(color=color_map['A'](0.1), label='Chain A'),   # Using 0.9 to get a dark shade
+    mpatches.Patch(color=color_map['B'](0.1), label='Chain B'),
+    mpatches.Patch(color=color_map['C'](0.1), label='Chain C')
+]
+
+# Add legend and labels
+plt.legend(handles=legend_patches, title="Class", frameon=False)
+plt.xlabel('PC1')
+plt.ylabel('PC2')
+plt.title('Scatter plot of Chain A, B and C')
+plt.show()
+# %%
+# Load each PDB file
+structure1_atoms = load_structure('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/mon-2918f-noh.pdb')
+structure2_atoms = load_structure('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/multipdb.pdb')
 
 # Compare the two sets of atoms
 if structure1_atoms == structure2_atoms:
