@@ -6,7 +6,7 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 import re
 import os
 #%%
-path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
+path = '/home/pghw87/Documents/md-sim/5ue6//monomer/monomer'
 try:
     os.chdir(path)
     print(f"Successfully changed the working directory to {path}")
@@ -20,7 +20,7 @@ codes = []
 strided_num = 50
 #%%
 # Open and read the file
-with open('chainC-1000f.tml', 'r') as file:
+with open('mon-2918f-3000ns.tml', 'r') as file:
     for line in file:
         if line.startswith('#'):
             continue
@@ -29,7 +29,7 @@ with open('chainC-1000f.tml', 'r') as file:
             continue
         # Append the extracted data to the lists
         residues.append(int(parts[0]))  # First number to residue
-        time.append(0.02*int(parts[-2]))  # Number after 'evalempty' (assuming 'evalempty' is always the second word)
+        time.append(0.01*int(parts[-2]))  # Number after 'evalempty' (assuming 'evalempty' is always the second word)
         codes.append(parts[-1])  # Last letter to code
 # Create a DataFrame from the lists
 df = pd.DataFrame({
@@ -43,16 +43,21 @@ print(df)
 #%%
 # Replace codes with number
 code_array = df['code'].unique()
-code_mapping = {code: i for i, code in enumerate(code_array)}
+#code_mapping = {code: i for i, code in enumerate(code_array)}
+code_mapping = {'C': 0, 'E': 1, 'B': 2, 'T': 3, 'H': 4, 'G': 5, 'I': 6}
+# For aggregated version:
+#code_mapping = {'C': 0, 'G': 2, 'E': 1, 'B': 1, 'T': 1, 'H': 2, 'I': 2}
 df['code'] = df['code'].replace(code_mapping)
 reversed_code_mapping = {v: k for k, v in code_mapping.items()}
+# For aggregated version
+#reversed_code_mapping = {0: 'coil', 2: 'helix', 1: 'sheet'}
 #%%
 # Pivot the DataFrame
 pivoted_df = df.pivot(index='residue', columns='time', values='code')
 
 # %%
 # Number of unique codes to set the number of discrete colors needed
-num_unique_codes = len(np.unique(pivoted_df.to_numpy().flatten()))
+num_unique_codes = len(code_array)
 
 # Create a color map with 'num_unique_codes' discrete colors from 'viridis'
 viridis = plt.cm.get_cmap('viridis', num_unique_codes)  # Get 'num_unique_codes' colors from viridis
@@ -73,10 +78,9 @@ cb.ax.set_yticklabels([reversed_code_mapping[i] for i in range(int(codes_min), i
 
 plt.xlabel('Time (ns)')
 plt.ylabel('Residue')
-plt.title('Timeline plot of chain C')
 plt.show()
 
-# %%
+#%%
 # Initialize an empty list to store the data
 data = []
 
