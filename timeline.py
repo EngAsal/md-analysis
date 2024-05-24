@@ -2,65 +2,113 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import re
 import os
+
 #%%
-path = '/home/pghw87/Documents/md-sim/5ue6//monomer/monomer'
+# Open and read the file
+def load_tml(filename):
+    residues = []
+    time = []
+    codes = []
+    #id = filename.split('-')[0]
+    with open(filename, 'r') as file:
+        for line in file:
+            if line.startswith('#'):
+                continue
+            parts = line.split() 
+            if len(parts) < 3:  
+                continue
+            residues.append(int(parts[0])) 
+            time.append(36.511*0.0001*int(parts[-2]))  
+            codes.append(parts[-1])  
+        df = pd.DataFrame({
+        'residue': residues,
+        'time': time,
+        'code': codes
+    })
+    return df
+#%%
+path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/vmd_analysis'
 try:
     os.chdir(path)
     print(f"Successfully changed the working directory to {path}")
 except Exception as e:
     print(f"Error occurred while changing the working directory: {e}")
+#tri_tml = load_tml('clustered-aligned-5000f.tml')
+A_tml = load_tml('chainA-1000f.tml')
+B_tml = load_tml('chainB-1000f.tml')
+C_tml = load_tml('chainC-1000f.tml')
 #%%
-# Initialize lists to hold your column data
-residues = []
-time = []
-codes = []
-strided_num = 50
+path = '/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/vmd_analysis'
+os.chdir(path)
+mon_tml = load_tml('monomer.tml')
+#mon_tml = mon_tml[mon_tml['time']<= 10.01]
 #%%
-# Open and read the file
-with open('mon-2918f-3000ns.tml', 'r') as file:
-    for line in file:
-        if line.startswith('#'):
-            continue
-        parts = line.split()  # Split the line into parts
-        if len(parts) < 3:  # Check if the line has at least 3 parts to avoid errors
-            continue
-        # Append the extracted data to the lists
-        residues.append(int(parts[0]))  # First number to residue
-        time.append(0.01*int(parts[-2]))  # Number after 'evalempty' (assuming 'evalempty' is always the second word)
-        codes.append(parts[-1])  # Last letter to code
-# Create a DataFrame from the lists
-df = pd.DataFrame({
-    'residue': residues,
-    'time': time,
-    'code': codes
-})
+# A_tml = A_tml[~A_tml['residue'].between(49, 52)]
+# B_tml = B_tml[~B_tml['residue'].between(49, 52)]
+mon_oterminus_tml = mon_tml[~mon_tml['residue'].between(352, 362)]
 
-# Display the DataFrame
-print(df)
+#%%
+# Sequential merging
+# df_final = A_tml.merge(B_tml, on=['residue', 'time'], how='outer')
+# df_final = df_final.merge(C_tml, on=['residue', 'time'], how='outer')
+# df_final = df_final.merge(mon_tml, on=['residue', 'time'], how='outer')
+#%%
+df_same = df_final[
+    (df_final['codechainA'] == df_final['codechainB']) & 
+    (df_final['codechainB'] == df_final['codechainC']) & 
+    (df_final['codechainC'] == df_final['codemon'])
+]
+#%%
+df_mondiff = df_final[
+    (df_final['codechainA'] == df_final['codechainB']) & 
+    (df_final['codechainB'] == df_final['codechainC']) & 
+    ~(df_final['codechainC'] == df_final['codemon'])
+]
+#%%
+df_trimer = df_final.drop('codemon', axis = 1)
+df_tri_same = df_final[
+    (df_final['codechainA'] == df_final['codechainB']) & 
+    (df_final['codechainB'] == df_final['codechainC'])
+]
+#%%
+df_tri_diff = df_final[
+    ~(df_final['codechainA'] == df_final['codechainB']) & 
+    ~(df_final['codechainB'] == df_final['codechainC']) &
+    (df_final['codechainA'] == df_final['codechainC'])
+]
 #%%
 # Replace codes with number
-code_array = df['code'].unique()
+#code_array = df['code'].unique()
 #code_mapping = {code: i for i, code in enumerate(code_array)}
 code_mapping = {'C': 0, 'E': 1, 'B': 2, 'T': 3, 'H': 4, 'G': 5, 'I': 6}
 # For aggregated version:
 #code_mapping = {'C': 0, 'G': 2, 'E': 1, 'B': 1, 'T': 1, 'H': 2, 'I': 2}
-df['code'] = df['code'].replace(code_mapping)
+mon_tml['code'] = mon_tml['code'].replace(code_mapping)
+# df_final['codechainA'] = df_final['codechainA'].replace(code_mapping)
+# df_final['codechainB'] = df_final['codechainB'].replace(code_mapping)
+# df_final['codechainC'] = df_final['codechainC'].replace(code_mapping)
 reversed_code_mapping = {v: k for k, v in code_mapping.items()}
 # For aggregated version
 #reversed_code_mapping = {0: 'coil', 2: 'helix', 1: 'sheet'}
 #%%
+# diff_res = df_mondiff['residue']
+# diff_time = df_mondiff['time']
+#%%
 # Pivot the DataFrame
-pivoted_df = df.pivot(index='residue', columns='time', values='code')
+pivoted_df = mon_tml.pivot(index='residue', columns='time', values='code')
+# tri_pivotted = tri_tml.pivot(index='residue', columns='time', values='codechainA')
+# A_pivotted = B_tml.pivot(index='residue', columns='time', values='codechainA')
+# B_pivotted = B_tml.pivot(index='residue', columns='time', values='codechainA')
 
 # %%
-# Number of unique codes to set the number of discrete colors needed
-num_unique_codes = len(code_array)
+num_unique_codes = len(code_mapping)
 
 # Create a color map with 'num_unique_codes' discrete colors from 'viridis'
-viridis = plt.cm.get_cmap('viridis', num_unique_codes)  # Get 'num_unique_codes' colors from viridis
+viridis = plt.cm.get_cmap('viridis', num_unique_codes)  
 colors = viridis(np.linspace(0, 1, num_unique_codes))  # Sample these colors evenly across the colormap
 cmap = ListedColormap(colors)
 
@@ -81,41 +129,115 @@ plt.ylabel('Residue')
 plt.show()
 
 #%%
-# Initialize an empty list to store the data
-data = []
-
 # Open the file and process each line
-with open('hbonds-details-3000.dat', 'r') as file:
-    next(file)  # Skip the header line if there is one
-    next(file)
-    for line in file:
-        parts = line.strip().split()  # Split line into parts
-        if len(parts) == 3:  # Assuming each line is made up of three elements
-            donor, acceptor, occupancy = parts
-            donor_res = int(re.search(r'(\d+)', donor).group(0))
-            acceptor_res = int(re.search(r'(\d+)', acceptor).group(0))
-            occupancy = float(occupancy.rstrip('%'))# Remove '%' and convert to float
-            data.append([donor, acceptor, occupancy, donor_res, acceptor_res])
-            
+def open_hbond_file(filename):
+    data = []
+    chain = os.path.splitext(filename)[0].split('-')[-1]
+    with open(filename, 'r') as file:
+        next(file)  # Skip the header line if there is one
+        next(file)
+        for line in file:
+            parts = line.strip().split()  # Split line into parts
+            if len(parts) == 3:  # Assuming each line is made up of three elements
+                donor, acceptor, occupancy = parts
+                #donor_res = int(re.search(r'(\d+)', donor).group(0))
+                #acceptor_res = int(re.search(r'(\d+)', acceptor).group(0))
+                occupancy = float(occupancy.rstrip('%'))# Remove '%' and convert to float
+                data.append([donor, acceptor, occupancy]) #donor_res, acceptor_res])      
+    hbond_df = pd.DataFrame(data, columns=['Donor', 'Acceptor', chain])#, 'Donor_res', 'Acceptor_res'])
+    return hbond_df
+#%%
+hbond_A = open_hbond_file('hbonds-details-chainA.dat')
+hbond_B = open_hbond_file('hbonds-details-chainB.dat')
+hbond_C = open_hbond_file('hbonds-details-chainC.dat')
+hbond_mon = open_hbond_file('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/vmd_analysis/hbonds-details-finalmon.dat')
 
-# Create a DataFrame
-hbond_df = pd.DataFrame(data, columns=['Donor', 'Acceptor', 'Occupancy', 'Donor_res', 'Acceptor_res'])
-
-print(hbond_df)
-
+#%%
+hbond_AB = pd.merge(hbond_A, hbond_B, on=['Donor', 'Acceptor'], how='outer')
+hbond_ABC = pd.merge(hbond_AB, hbond_C, on=['Donor', 'Acceptor'], how='outer')
+hbond_all = pd.merge(hbond_ABC, hbond_mon, on=['Donor', 'Acceptor'], how='outer')
+hbond_all.fillna({'chainA': 0, 'chainB': 0, 'chainC': 0, 'finalmon':0}, inplace=True)
+hbond_all['ABC_mean'] = hbond_all[['chainA', 'chainB', 'chainC']].mean(axis=1)
+hbond_all['ABC_stdev'] = hbond_all[['chainA', 'chainB', 'chainC']].std(axis=1)
+hbond_all['diff'] = hbond_all['finalmon'] - hbond_all['ABC_mean']
+#hbond_all['ABC_stdev'] = hbond_all['ABC_stdev'].replace(0,1)
+#%%
+hbond_all['diff'] <= 5
 # %%
-print(hbond_df['Occupancy'].describe())
+threshold = 5 * hbond_all['ABC_stdev']
+final_df = hbond_all[np.abs(hbond_all['diff']) > threshold]
+filtered_df = final_df[~((final_df['ABC_stdev'] == 0) & (final_df['finalmon'] <= 5))]
+#%%
+pivot_df = filtered_df.pivot(index='Donor', columns='Acceptor', values='diff')
+pivot_mon = hbond_mon.pivot(index='Donor', columns='Acceptor', values='finalmon')
+#pivot_df.fillna(0, inplace=True)
+occupancy_array = pivot_df.values
+masked_array = np.ma.masked_equal(occupancy_array, 0)
+#%%
+# find sorting order of x-axis, and sort its labels
+xlabels = pivot_df.columns
+x_resids = [int(l.split("-")[0][3:]) for l in xlabels] # get list of integer numbers representing resids
+x_sorting = np.argsort(np.array(x_resids)) # find sorting order
+xlabels = xlabels[x_sorting] # re-sort x-axis labels
 
-# %%
-import matplotlib.pyplot as plt
-import seaborn as sns
+ylabels = pivot_df.index
+# find sorting order of y-axis, and sort its labels (same as above)
+y_resids = [int(l.split("-")[0][3:]) for l in ylabels]
+y_sorting = np.argsort(np.array(y_resids)) 
+ylabels = ylabels[y_sorting]
+#%%
+# sort the data
+sorted_df = pivot_df.reindex(index=ylabels, columns=xlabels)
 
-sns.histplot(hbond_df['Occupancy'], bins=10, kde=True)
-plt.title('Histogram of H-Bond Occupancies')
-plt.xlabel('Occupancy')
-plt.ylabel('Frequency')
+#%%
+fig, ax = plt.subplots(figsize=(16, 14))
+cmap = plt.cm.coolwarm  # Use a diverging colormap
+
+# Set the color for NaN values
+cmap.set_bad(color='white')  # This sets NaN values to appear white
+
+# Create a masked array where NaNs are masked
+masked_array = np.ma.masked_invalid(sorted_df.values)
+
+# Create the grid for plotting
+x_edges = np.arange(sorted_df.shape[1] + 1)
+y_edges = np.arange(sorted_df.shape[0] + 1)
+
+# Create the pcolormesh plot
+c = ax.pcolormesh(x_edges, y_edges, masked_array, cmap=cmap, shading='flat', vmin=-70, vmax=70)
+
+# Set the ticks at the center of the cells
+ax.set_xticks(x_edges[:-1] + 0.5, minor=False)
+ax.set_yticks(y_edges[:-1] + 0.5, minor=False)
+
+# Set tick labels
+ax.set_xticklabels(sorted_df.columns, rotation=90)
+ax.set_yticklabels(sorted_df.index)
+
+# Add a color bar
+colorbar = plt.colorbar(c, ax=ax)
+colorbar.set_label('difference of h-bond occupancy percentage between monomer and mean of three chains of trimer')
+
+# Add labels and title if necessary
+ax.set_xlabel('Acceptor')
+ax.set_ylabel('Donor')
+ax.set_title('H-Bond Occupancy Heatmap')
+ax.tick_params(axis='x', labelsize=10) 
+ax.tick_params(axis='y', labelsize=10) 
+
 plt.show()
+#%%
+column_max = filtered_df['diff'].max()
+column_min = filtered_df['diff'].min()
 
+print("Maximum value in column 'diff':", column_max)
+print("Minimum value in column 'diff':", column_min)
+#%%
+max_index_A = filtered_df['diff'].idxmax()
+min_index_A = filtered_df['diff'].idxmin()
+
+print("Index of the maximum value in column 'A':", max_index_A)
+print("Index of the maximum value in column 'A':", min_index_A)
 # %%
 from sklearn.cluster import KMeans
 
@@ -141,3 +263,62 @@ print(df.groupby('secondary_structure')['Occupancy'].mean())
 sns.boxplot(data=df, x='secondary_structure', y='Occupancy')
 plt.title('Occupancy by Secondary Structure')
 plt.show()
+#%%
+def plot_hbond(df, column):
+    pivot_df = df.pivot(index='Donor', columns='Acceptor', values=column)
+
+    occupancy_array = pivot_df.values
+    masked_array = np.ma.masked_equal(occupancy_array, 0)
+    
+    xlabels = pivot_df.columns
+    x_resids = [int(l.split("-")[0][3:]) for l in xlabels] # get list of integer numbers representing resids
+    x_sorting = np.argsort(np.array(x_resids)) # find sorting order
+    xlabels = xlabels[x_sorting] # re-sort x-axis labels
+    
+    ylabels = pivot_df.index
+    # find sorting order of y-axis, and sort its labels (same as above)
+    y_resids = [int(l.split("-")[0][3:]) for l in ylabels]
+    y_sorting = np.argsort(np.array(y_resids)) 
+    ylabels = ylabels[y_sorting]
+    # sort the data
+    sorted_df = pivot_df.reindex(index=ylabels, columns=xlabels)
+    
+    fig, ax = plt.subplots(figsize=(16, 14))
+    cmap = plt.cm.coolwarm  # Use a diverging colormap
+    
+    # Set the color for NaN values
+    cmap.set_bad(color='white')  # This sets NaN values to appear white
+    
+    # Create a masked array where NaNs are masked
+    masked_array = np.ma.masked_invalid(sorted_df.values)
+    
+    # Create the grid for plotting
+    x_edges = np.arange(sorted_df.shape[1] + 1)
+    y_edges = np.arange(sorted_df.shape[0] + 1)
+    
+    # Create the pcolormesh plot
+    c = ax.pcolormesh(x_edges, y_edges, masked_array, cmap=cmap, shading='flat', vmin=-70, vmax=70)
+    
+    # Set the ticks at the center of the cells
+    ax.set_xticks(x_edges[:-1] + 0.5, minor=False)
+    ax.set_yticks(y_edges[:-1] + 0.5, minor=False)
+    
+    # Set tick labels
+    ax.set_xticklabels(sorted_df.columns, rotation=90)
+    ax.set_yticklabels(sorted_df.index)
+    
+    # Add a color bar
+    colorbar = plt.colorbar(c, ax=ax)
+    colorbar.set_label('difference of h-bond occupancy percentage between monomer and mean of three chains of trimer')
+    
+    # Add labels and title if necessary
+    ax.set_xlabel('Acceptor')
+    ax.set_ylabel('Donor')
+    ax.set_title('H-Bond Occupancy Heatmap')
+    ax.tick_params(axis='x', labelsize=10) 
+    ax.tick_params(axis='y', labelsize=10) 
+    
+    plt.show()
+# %%
+plot_hbond(hbond_mon, 'finalmon')
+# %%
