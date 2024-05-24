@@ -4,7 +4,9 @@ import MDAnalysis as mda
 from MDAnalysis.coordinates.XTC import XTCWriter
 from MDAnalysis.analysis import pca, diffusionmap, rms, align
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 
 class SingleAnalysis:
@@ -91,28 +93,101 @@ class SingleAnalysis:
         matrix = diffusionmap.DistanceMatrix(self.universe, select='name CA').run()
         
         frame_num = len(self.universe.trajectory)
-        total_time = frame_num * slice_step * 20
+        total_time = frame_num * slice_step * 20 / 1000000
 
         plt.imshow(matrix.dist_matrix, cmap='viridis', extent=[0,total_time, 0,total_time])
         plt.xlabel(r'Time ($\mu$s)')
         plt.ylabel(r'Time ($\mu$s)')
         plt.colorbar(label=r'RMSD ($\AA$)')
         plt.show()
-
-class MultiAnalysis:
-    def __init__(self, monomer=None, chainA, chainB=None, chainC=None):
-        self.trimer_path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
+    
+    def plot_timeline(tml_file, aggregated = False):
+        residues = []
+        time = []
+        codes = []
+        with open(tml_file, 'r') as file:
+            for line in file:
+                if line.startswith('#'):
+                    continue
+                parts = line.split() 
+                if len(parts) < 3:  
+                    continue
+        residues.append(int(parts[0])) 
+        time.append(0.01*int(parts[-2]))  
+        codes.append(parts[-1])  
+        df = pd.DataFrame({
+            'residue': residues,
+            'time': time,
+            'code': codes
+            })
         
-        if monomer is not None:
-            self.monomer_path = '/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/'
-            self.mon_gro_file = 'data/self.monomer'
-            self.mon_xtc_file = 'self.monomer'
-        if chainA is not None:
-            
-            self.A_gro_file = 'data/self.chainA'
-            self.A_xtc_file = 'self.chainA'
-            
+        if aggregated:
+            code_mapping = {'C': 0, 'G': 2, 'E': 1, 'B': 1, 'T': 1, 'H': 2, 'I': 2}
+            reversed_code_mapping = {0: 'coil', 2: 'helix', 1: 'sheet'}
+        else:
+            code_mapping = {'C': 0, 'E': 1, 'B': 2, 'T': 3, 'H': 4, 'G': 5, 'I': 6}
+            reversed_code_mapping = {v: k for k, v in code_mapping.items()}
+        
+        df['code'] = df['code'].replace(code_mapping)
+        pivoted_df = df.pivot(index='residue', columns='time', values='code')
+
+        viridis = plt.cm.get_cmap('viridis', len(code_mapping))  
+        colors = viridis(np.linspace(0, 1, len(code_mapping))) 
+        cmap = ListedColormap(colors)
+        codes_min, codes_max = pivoted_df.min().min(), pivoted_df.max().max()
+        boundaries = np.arange(codes_min-0.5, codes_max+1.5, 1)
+        norm = BoundaryNorm(boundaries, cmap.N, clip=True)
+        
+        plt.figure(figsize=(12, 6))
+        c = plt.pcolormesh(pivoted_df.columns, pivoted_df.index, pivoted_df, cmap=cmap, norm=norm, shading='auto')
+
+        cb = plt.colorbar(c, ticks=np.arange(codes_min, codes_max+1))
+        cb.ax.set_yticklabels([reversed_code_mapping[i] for i in range(int(codes_min), int(codes_max)+1)])
+
+        plt.xlabel('Time (ns)')
+        plt.ylabel('Residue')
+        plt.show()
+#%%
+class MultiAnalysis:
+    def __init__(self, *configs):
+        self.configs = configs
+        self.universes = {}
+        self.directories = {
+            'monomer':'/home/pghw87/Documents/md-sim/5ue6/monomer/monomer',
+            'trimer':'/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
+        }
+        for config in configs:
+            molecule_type, file_name = config
+            self.setup_analysis(molecule_type, file_name)
+    
+    def setup_analysis(self, molecule_type, file_name):
+        directory = self.directories.get(molecule_type)
+        topology_file = f"{file_name}.gro"
+        trajectory_file = f"{file_name}.xtc"
+        aligned_trj_file = f"{file_name}_aligned.xtc"
+
+        try:
+            os.chdir(directory)
+            print(f"changed directory to {directory}")
+        except Exception as e:
+            print(f"error chaging directory as {e}")
+            return
+        
+        self.load_universe(molecule_type, topology_file, trajectory_file, aligned_trj_file)
+
+    def load_universe(self, molecule_type, topology_file, trajectory_file, aligned_trj_file):
+        if os.path.exists(aligned_trj_file):
+            print(f"Aligned trajectory for {molecule_type} found. Loading...")
+            universe = mda.Universe(topology_file, aligned_trj_file)
+        else:
+            print(f"No aligned trajectory file found for {molecule_type}. Aligning...")
+            universe = mda.Universe(topology_file, trajectory_file)
+            reference = mda.Universe(topology_file, trajectory_file)
+            align.AlignTraj(universe, reference, select = 'protein', filename = aligned_trj_file ).run()
+            universe = mda.Universe(topology_file, aligned_trj_file)
+
+        self.universes[molecule_type] = universe
+        print(f"{molecule_type} universe loaded.")
 
 
-
-
+# %%
