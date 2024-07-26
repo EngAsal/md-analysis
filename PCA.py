@@ -166,7 +166,7 @@ aligner = align.AlignTraj(u, ref, select='protein',
 
 # %%
 # Set dir path
-path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/chains'
+path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
  
 try:
     os.chdir(path)
@@ -233,7 +233,7 @@ print(f"Unaligned RMSD: {unaligned_rmsd:.2f}")
 #%%
 import biobox as bb
 M = bb.Molecule()
-M.import_pdb('mon-1841f-6ms-res53to362-noh-CA.pdb')
+M.import_pdb('monomer.pdb')
 
 # %%
 pc = M.pca(components = 2)
@@ -456,8 +456,8 @@ plt.show()
 from sklearn.cluster import DBSCAN
 
 results_dict = {}
-cutoff = (3,6,9)
-density = (3,6,9)
+cutoff = (3,4)
+density = (9,10)
 
 for e in cutoff:
     for d in density:
@@ -536,7 +536,7 @@ non_noise_mask = labels != -1
 filtered_projection = projection[non_noise_mask]
 # %%
 # %%
-clustering = DBSCAN(eps = 6, min_samples = 6).fit(filtered_projection)
+clustering = DBSCAN(eps =3, min_samples = 7).fit(filtered_projection)
 labels = clustering.labels_
 n_clusters = len(set(labels))
 noise = list(labels).count(-1)
@@ -573,7 +573,9 @@ for k, col in zip(unique_labels, colors):
         markeredgecolor="k",
         markersize=6,
     )
-
-plt.title(f"Estimated number of clusters: {n_clusters}")
+plt.xlabel(f'PC1 ({round(pc[1].explained_variance_ratio_[0] * 100, 1)}%)')
+plt.ylabel(f'PC2 ({round(pc[1].explained_variance_ratio_[1] * 100, 1)}%)')
+#plt.title(f"Estimated number of clusters: {n_clusters-1}")
 plt.show()
+
 # %%

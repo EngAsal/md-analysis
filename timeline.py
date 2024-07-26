@@ -11,6 +11,7 @@ import os
 # Open and read the file
 def load_tml(filename):
     residues = []
+    frame = []
     time = []
     codes = []
     #id = filename.split('-')[0]
@@ -22,13 +23,20 @@ def load_tml(filename):
             if len(parts) < 3:  
                 continue
             residues.append(int(parts[0])) 
-            time.append(36.511*0.0001*int(parts[-2]))  
+            frame_number = int(parts[-2])
+            frame.append(frame_number)
+            time.append(frame_number)
             codes.append(parts[-1])  
         df = pd.DataFrame({
         'residue': residues,
+        'frame': frame, 
         'time': time,
         'code': codes
-    })
+        })
+
+        df['timestep'] = df['frame'].apply(lambda x: 2000 if x < 1457 else 10000 if x >= 1457 else 7880)
+        df['time'] = df['time'] * df['timestep'] /2000000
+        
     return df
 #%%
 path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/vmd_analysis'
@@ -37,6 +45,7 @@ try:
     print(f"Successfully changed the working directory to {path}")
 except Exception as e:
     print(f"Error occurred while changing the working directory: {e}")
+#%%
 #tri_tml = load_tml('clustered-aligned-5000f.tml')
 A_tml = load_tml('chainA-1000f.tml')
 B_tml = load_tml('chainB-1000f.tml')
@@ -132,7 +141,7 @@ plt.show()
 # Open the file and process each line
 def open_hbond_file(filename):
     data = []
-    chain = os.path.splitext(filename)[0].split('-')[-1]
+    name = os.path.splitext(filename)[0].split('-')[0]
     with open(filename, 'r') as file:
         next(file)  # Skip the header line if there is one
         next(file)
@@ -144,32 +153,34 @@ def open_hbond_file(filename):
                 #acceptor_res = int(re.search(r'(\d+)', acceptor).group(0))
                 occupancy = float(occupancy.rstrip('%'))# Remove '%' and convert to float
                 data.append([donor, acceptor, occupancy]) #donor_res, acceptor_res])      
-    hbond_df = pd.DataFrame(data, columns=['Donor', 'Acceptor', chain])#, 'Donor_res', 'Acceptor_res'])
+    hbond_df = pd.DataFrame(data, columns=['Donor', 'Acceptor', f'{name}'])#, 'Donor_res', 'Acceptor_res'])
     return hbond_df
 #%%
-hbond_A = open_hbond_file('hbonds-details-chainA.dat')
-hbond_B = open_hbond_file('hbonds-details-chainB.dat')
-hbond_C = open_hbond_file('hbonds-details-chainC.dat')
-hbond_mon = open_hbond_file('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/vmd_analysis/hbonds-details-finalmon.dat')
+os.chdir('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/vmd_analysis')
+hbond_A = open_hbond_file('chainA-details.dat')
+hbond_B = open_hbond_file('chainB-details.dat')
+hbond_C = open_hbond_file('chainC-details.dat')
+os.chdir('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/vmd_analysis')
+hbond_mon = open_hbond_file('mon-details.dat')
 
 #%%
 hbond_AB = pd.merge(hbond_A, hbond_B, on=['Donor', 'Acceptor'], how='outer')
 hbond_ABC = pd.merge(hbond_AB, hbond_C, on=['Donor', 'Acceptor'], how='outer')
 hbond_all = pd.merge(hbond_ABC, hbond_mon, on=['Donor', 'Acceptor'], how='outer')
-hbond_all.fillna({'chainA': 0, 'chainB': 0, 'chainC': 0, 'finalmon':0}, inplace=True)
+hbond_all.fillna({'chainA': 0, 'chainB': 0, 'chainC': 0, 'mon':0}, inplace=True)
 hbond_all['ABC_mean'] = hbond_all[['chainA', 'chainB', 'chainC']].mean(axis=1)
 hbond_all['ABC_stdev'] = hbond_all[['chainA', 'chainB', 'chainC']].std(axis=1)
-hbond_all['diff'] = hbond_all['finalmon'] - hbond_all['ABC_mean']
+hbond_all['diff'] = hbond_all['mon'] - hbond_all['ABC_mean']
 #hbond_all['ABC_stdev'] = hbond_all['ABC_stdev'].replace(0,1)
 #%%
 hbond_all['diff'] <= 5
 # %%
 threshold = 5 * hbond_all['ABC_stdev']
 final_df = hbond_all[np.abs(hbond_all['diff']) > threshold]
-filtered_df = final_df[~((final_df['ABC_stdev'] == 0) & (final_df['finalmon'] <= 5))]
+filtered_df = final_df[~((final_df['ABC_stdev'] == 0) & (final_df['mon'] <= 5))]
 #%%
 pivot_df = filtered_df.pivot(index='Donor', columns='Acceptor', values='diff')
-pivot_mon = hbond_mon.pivot(index='Donor', columns='Acceptor', values='finalmon')
+pivot_mon = hbond_mon.pivot(index='Donor', columns='Acceptor', values='mon')
 #pivot_df.fillna(0, inplace=True)
 occupancy_array = pivot_df.values
 masked_array = np.ma.masked_equal(occupancy_array, 0)
@@ -188,7 +199,6 @@ ylabels = ylabels[y_sorting]
 #%%
 # sort the data
 sorted_df = pivot_df.reindex(index=ylabels, columns=xlabels)
-
 #%%
 fig, ax = plt.subplots(figsize=(16, 14))
 cmap = plt.cm.coolwarm  # Use a diverging colormap
@@ -217,6 +227,29 @@ ax.set_yticklabels(sorted_df.index)
 # Add a color bar
 colorbar = plt.colorbar(c, ax=ax)
 colorbar.set_label('difference of h-bond occupancy percentage between monomer and mean of three chains of trimer')
+
+import re
+res = []
+for r in sorted_df.index:
+    num = re.findall(r'\d+', r)
+    res.extend(map(int, num))
+# Cu_cite_type1 = [134, 175, 183, 188]
+# Cu_cite_type1_color = 'orangered'
+
+# Cu_cite_type2 = [139, 174, 329]
+# Cu_cite_type2_color = 'magenta'
+
+# for i, residue in enumerate(Cu_cite_type1):
+#     if i == 0: 
+#         plt.axhline(y=residue, color=Cu_cite_type1_color, linestyle='--', linewidth=1.7, label='Cu cite type 1')
+#     else:
+#         plt.axhline(y=residue, color=Cu_cite_type1_color, linestyle='--', linewidth=1.7)
+
+# for i, residue in enumerate(Cu_cite_type2):
+#     if i == 0:
+#         plt.axhline(y=residue, color=Cu_cite_type2_color, linestyle='--', linewidth=1.7, label='Cu cite type 2')
+#     else:
+#         plt.axhline(y=residue, color=Cu_cite_type2_color, linestyle='--', linewidth=1.7)
 
 # Add labels and title if necessary
 ax.set_xlabel('Acceptor')
