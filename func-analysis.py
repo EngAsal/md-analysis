@@ -368,9 +368,9 @@ def pca_prep(*universe_discts, end_res):
 
         u_CA_noh_res53 = universe.select_atoms(f'protein and name CA and not name H and resid 53:{end_res}')
         # Write the topology file
-        u_CA_noh_res53.write(f'{molecule_name}_CA_noh_res53.pdb')
+        u_CA_noh_res53.write(f'data/{molecule_name}_CA_noh_res53.pdb')
         # Write the trajectory file
-        with MDAnalysis.Writer(f'{molecule_name}_CA_noh_res53.xtc', u_CA_noh_res53.n_atoms) as W:
+        with MDAnalysis.Writer(f'data/{molecule_name}_CA_noh_res53.xtc', u_CA_noh_res53.n_atoms) as W:
             for ts in universe.trajectory:
                 W.write(u_CA_noh_res53)
         # Load the universe for CA-noh residues 53-362  
@@ -396,7 +396,7 @@ def pca_prep(*universe_discts, end_res):
     
     filename = ''.join([name for name in CA_noh_res53.keys()]) + '.pdb'
 
-    with MDAnalysis.Writer(f'/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/{filename}') as W:
+    with MDAnalysis.Writer(f'data/{filename}') as W:
         for ts in multi_pdb.trajectory:
             W.write(multi_pdb)
     
