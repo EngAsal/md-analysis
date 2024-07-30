@@ -1,1 +1,7 @@
 *.png
+data/*.pdb
+data/*.xtc
+data/*.lock
+data/*.npz
+*.npz
+*.lock

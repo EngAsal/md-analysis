@@ -451,3 +451,72 @@ plt.xlabel('Simulation step')
 plt.ylabel('density (kg/m^3)')
 plt.show()
 # %%
+stride_step = 100
+monomer_res = mda.Universe('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/5ue6_newbox.gro', '/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/updated_final_center_aligned_res53_349.xtc')
+with XTCWriter('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/aligned_res53_349_sliced100.xtc', n_atoms=monomer_res.atoms.n_atoms) as writer:
+    for ts in monomer_res.trajectory[::stride_step]:
+        writer.write(monomer_res.atoms)
+# %%
+monomer_res_100 = mda.Universe('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/5ue6_newbox.gro', '/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/aligned_res53_349_sliced100.xtc')
+# %%
+universe = monomer_res_100
+reference = universe
+universe.trajectory[-1]
+reference.trajectory[0]
+R = mda.analysis.rms.RMSD(universe, reference, select='backbone').run()
+df = pd.DataFrame(R.rmsd, columns=['Frame', r'Time (ps)', 'Backbone'])
+df[r'Time ($\mu$s)'] = df[r'Time (ps)'] / 1000000
+
+plt.plot(df[r'Time ($\mu$s)'], df['Backbone'], color='purple', alpha=0.9)
+# %%
+matrix = diffusionmap.DistanceMatrix(monomer_res_100, select='name CA').run()
+# Show the matrix
+plt.imshow(matrix.dist_matrix, cmap='viridis', origin='lower', vmin=0, vmax=7)
+plt.xlabel('Frame')
+plt.ylabel('Frame')
+plt.colorbar(label=r'RMSD ($\AA$)')
+# %%
+# Calculate RMSF
+c_alphas = monomer_res_100.select_atoms('protein and backbone')
+R = rms.RMSF(c_alphas).run()
+# Plot RMSF only for a subset of residues 
+start_residue = 49  # example start residue
+end_residue = 362   # example end residue
+
+# Filter resids and RMSF values for the specified range
+indices = (c_alphas.resids >= start_residue) & (c_alphas.resids <= end_residue)
+selected_resids = c_alphas.resids[indices]
+selected_rmsf = R.results.rmsf[indices]
+
+# Plot the RMSF for the selected range of residues
+plt.plot(selected_resids, selected_rmsf, color='purple')
+plt.xlabel('Residue number')
+plt.ylabel('RMSF ($\AA$)')
+plt.show()
+# %%
+os.chdir('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer')
+mobile = mda.Universe('5ue6_newbox.gro', 'updated_final_center.xtc')
+ref = mda.Universe('5ue6_newbox.gro', 'updated_final_center.xtc')
+
+mobile.trajectory[-1]  # set mobile trajectory to last frame
+ref.trajectory[0]  # set reference trajectory to first frame
+
+mobile_ca = mobile.select_atoms('name CA')
+ref_ca = ref.select_atoms('name CA')
+unaligned_rmsd = rms.rmsd(mobile_ca.positions, ref_ca.positions, superposition=False)
+print(f"Unaligned RMSD: {unaligned_rmsd:.2f}")
+#%%
+aligner = align.AlignTraj(mobile, ref, select='protein and resid 53:349',
+                          filename='aligned_to_first_frame_res.xtc').run()
+mobile = mda.Universe('5ue6_newbox.gro', 'aligned_to_first_frame_res.xtc')
+
+#%%
+mobile.trajectory[-1]  # set mobile trajectory to last frame
+ref.trajectory[0]  # set reference trajectory to first frame
+
+mobile_ca = mobile.select_atoms('name CA')
+ref_ca = ref.select_atoms('name CA')
+aligned_rmsd = rms.rmsd(mobile_ca.positions, ref_ca.positions, superposition=False)
+
+print(f"Aligned RMSD: {aligned_rmsd:.2f}")
+#%%

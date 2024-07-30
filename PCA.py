@@ -233,7 +233,7 @@ print(f"Unaligned RMSD: {unaligned_rmsd:.2f}")
 #%%
 import biobox as bb
 M = bb.Molecule()
-M.import_pdb('monomer.pdb')
+M.import_pdb('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomer.pdb')
 
 # %%
 pc = M.pca(components = 2)
@@ -536,7 +536,7 @@ non_noise_mask = labels != -1
 filtered_projection = projection[non_noise_mask]
 # %%
 # %%
-clustering = DBSCAN(eps =3, min_samples = 7).fit(filtered_projection)
+clustering = DBSCAN(eps =2.5, min_samples = 14).fit(filtered_projection)
 labels = clustering.labels_
 n_clusters = len(set(labels))
 noise = list(labels).count(-1)
