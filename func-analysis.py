@@ -10,26 +10,30 @@ import matplotlib.cm as cm
 import matplotlib.patches as mpatches
 from MDAnalysis.coordinates.XTC import XTCWriter
 import MDAnalysis as mda
-from MDAnalysis.analysis import pca, diffusionmap, rms, align
+from MDAnalysis.analysis import pca, diffusionmap, rms, align   
 from MDAnalysis.coordinates.PDB import PDBWriter
 import MDAnalysis.analysis.rms
 import biobox as bb
 import inspect
-
+from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
+from collections import defaultdict
 #%%
 # Load the aligned universe and stride it if needed
 def load_universe(molecule_name, top_file, trj_file, alignment=None, alig_res_start=None, alig_res_end=None, stride_step=None):
     if molecule_name in ['monomer']: 
-        base_path = '/home/pghw87/Documents/md-sim/5ue6/monomer/monomer'
-
+        base_path = '/home/pghw87/Documents/md-sim/5ue6/MDAniA/data/monomer'
+        
     elif molecule_name in ['trimer', 'chainA', 'chainB', 'chainC']:
-        base_path = '/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC'
+        base_path = '/home/pghw87/Documents/md-sim/5ue6/MDAniA/data/trimer'
+
+    elif molecule_name in ['CU_type1']:
+        base_path = '/home/pghw87/Documents/md-sim/5ue6/MDAniA/data/CU_type1'
 
     else:
         logging.error(f'Unsupported molecule: {molecule_name}')
         return
     
-    top_file_path = os.path.join(base_path, top_file)
+    top_file_path = os.path.join(base_path, top_file)         
     trj_file_path = os.path.join(base_path, trj_file)
     traj_to_load = trj_file_path
 
@@ -37,26 +41,29 @@ def load_universe(molecule_name, top_file, trj_file, alignment=None, alig_res_st
     universe.trajectory[0]  
     ref = universe
     ref.trajectory[-1]  
-    mobile_ca = universe.select_atoms('name CA')
-    ref_ca = ref.select_atoms('name CA')
-    Unaligned_rmsd = rms.rmsd(mobile_ca.positions, ref_ca.positions, superposition=False)
-    print(f"Unligned RMSD: {Unaligned_rmsd:.2f}")
-    
+   
     if alignment == 'all':
-        alig_res_end = 362
         if molecule_name == 'monomer' and 'chainA':
-            alig_res_start = 49
+            alig_res_start = 1
+            alig_res_end = 314
+        elif molecule_name == 'CU_type1': 
+            alig_res_start = 1
+            alig_res_end = 314
         elif molecule_name == 'trimer' or 'chainB' or 'chainC':
             alig_res_start = 53
-        
+            alig_res_end = 362
+
     elif alignment == 'domain':
-        alig_res_start = 53
-        alig_res_end = 349
+        alig_res_start = 7
+        alig_res_end = 299
+
     else:
         alig_res_start = alig_res_start
         alig_res_end = alig_res_end
 
-    # Aligning the protein to a specific residue
+    
+
+    # Aligning the protein to a specific domain
     aligned_res_file = f"{os.path.splitext(trj_file_path)[0]}_aligned_res{alig_res_start}_{alig_res_end}.xtc"
     if alig_res_start and alig_res_end is not None:
         if os.path.exists(aligned_res_file):
@@ -96,60 +103,27 @@ def load_universe(molecule_name, top_file, trj_file, alignment=None, alig_res_st
     return {molecule_name: universe, 'stride_step': stride_step, 'alignment': alignment, 'aligned_res_start': alig_res_start, 'aligned_res_end': alig_res_end}
 
 # Plot RMSD for one or more universes
-def rmsd_plot(*universe_dicts, colors=None):
-    
+def rmsd_plot(*universe_dicts, colors=None):    
+    color_label_map = {'monomer': {'all': ('purple','monomer (all)'), 'domain': ('purple', 'monomer (no C-ter)')},
+                       'trimer': {'all': ('black', 'trimer (all)'), 'domain': ('grey', 'trimer (no C-ter)')},
+                       'chainA': {'all': ('darkcyan', 'chainA (all)'), 'domain': ('darkcyan', 'chainA (no C-ter)')},
+                       'chainB': {'all': ('yellowgreen', 'chainB (all)'), 'domain': ('yellowgreen', 'chainB (no C-ter)')},
+                       'chainC': {'all': ('chocolate', 'chainC (all)'), 'domain': ('chocolate', 'chainC (no C-ter)')},
+                       'CU_type1': {'all': ('thistle','monomer_CUI (all)'), 'domain': ('thistle', 'monomer_CUI (no C-ter)')},
+                        }
+
     for u in universe_dicts:
         molecule_name, universe = next(iter(u.items()))
         
         start_res = u.get('aligned_res_start')
         end_res = u.get('aligned_res_end')
-        alignment = u.get('alignment')
-    
-        if molecule_name == 'monomer':
-            if alignment == 'all':
-                color = 'purple'
-                label = f'{molecule_name} ({alignment})'
-            elif alignment == 'domain':
-                color = 'plum'
-                label = f'{molecule_name} (no C-ter)'
 
-        elif molecule_name == 'trimer':
-            if alignment == 'all':
-                color = 'black' 
-                label = f'{molecule_name} ({alignment})'
-            elif alignment == 'domain':
-                color = 'grey'
-                label = f'{molecule_name} (no C-ter)'
-
-        elif molecule_name == 'chainA':
-            if alignment == 'all':
-                color = 'darkcyan' 
-                label = f'{molecule_name} ({alignment})'
-            elif alignment == 'domain':
-                color = 'darkcyan'
-                label = f'{molecule_name} (no C-ter)'
-
-        elif molecule_name == 'chainB':
-            if alignment == 'all':
-                color = 'yellowgreen' 
-                label = f'{molecule_name} ({alignment})'
-            elif alignment == 'domain':
-                color = 'yellowgreen'
-                label = f'{molecule_name} (no C-ter)'
-
-        elif molecule_name == 'chainC':
-            if alignment == 'all':
-                color = 'chocolate' 
-                label = f'{molecule_name} ({alignment})'
-            elif alignment == 'domain':
-                color = 'chocolate'
-                label = f'{molecule_name} (no C-ter)'
-            
+        if molecule_name in color_label_map:
+            color, label = color_label_map[molecule_name][u.get('alignment')]
         else:
             color = colors
             label = molecule_name
 
-        # for universe, color, label, start, end in zip(u, color, molecule_name, start_res, end_res):
         reference = universe
         universe.trajectory[-1]
         reference.trajectory[0]
@@ -157,7 +131,7 @@ def rmsd_plot(*universe_dicts, colors=None):
         df = pd.DataFrame(R.rmsd, columns=['Frame', r'Time (ps)', 'Backbone'])
         df[r'Time ($\mu$s)'] = df[r'Time (ps)'] / 1000000
 
-        plt.plot(df[r'Time ($\mu$s)'], df['Backbone'], color=color, label=label, alpha=0.9)
+        plt.plot(df[r'Time ($\mu$s)'], df['Backbone'], color=color, label=label, alpha=0.8)
 
     if len(universe_dicts) > 1:
         plt.legend(frameon=False)
@@ -165,10 +139,10 @@ def rmsd_plot(*universe_dicts, colors=None):
     plt.xlabel(r'Time ($\mu$s)')
     plt.ylabel(r'RMSD ($\AA$)')
     plt.show()
+    plt.savefig(f'{molecule_name}_rmsd.png')
 #%%
-def rmsf_plot(*universe_dicts, start_res=None, end_res=None, plot_mean=False):
-
-
+# Plot RMSF for one or more universes
+def rmsf_plot(*universe_dicts, start_res=None, end_res=None, plot_mean=False, plot_diff=False):
     if len(universe_dicts) == 1 and plot_mean:
         raise ValueError('Error: Cannot plot mean RMSF with only one universe.')
     
@@ -177,51 +151,53 @@ def rmsf_plot(*universe_dicts, start_res=None, end_res=None, plot_mean=False):
     sd_rmsf = []
     upper_limit = []
     lower_limit = []    
-    
+    residue_rmsf_diff = []
+    rmsf_dict = {}
+    rmsf_values = []
+    diff = []
+
     for u in universe_dicts:
-        # for trimer chains : ['darkcyan', 'yellowgreen', 'chocolate', 'purple']
+ 
         molecule_name , universe = next(iter(u.items()))
         alignment = u.get('alignment')
-        if molecule_name == 'monomer':
-            color = 'purple'
-        elif molecule_name == 'trimer':
-            color = 'black' 
-        elif molecule_name == 'chainA':
-            color = 'darkcyan'
-        elif molecule_name == 'chainB':
-            color = 'yellowgreen'
-        elif molecule_name == 'chainC':
-            color = 'chocolate'
+        color_map = {'monomer': 'purple', 'trimer': 'black', 'chainA': 'darkcyan', 'chainB': 'yellowgreen',
+                    'chainC': 'chocolate', 'CU_type1': 'thistle'}
+        color = color_map[molecule_name]
+        backbone = universe.select_atoms('backbone')
 
-        backbone = universe.select_atoms('protein and backbone')
         if start_res is not None and end_res is not None:
             indices = (backbone.resids >= start_res) & (backbone.resids <= end_res)
             backbone = backbone[indices]
 
-        rmsf_values = rms.RMSF(backbone).run().rmsf         
+        rmsf_values = rms.RMSF(backbone).run().rmsf      
+        rmsf_dict[molecule_name] = rmsf_values
+        print(len(rmsf_values))
+        print(backbone.resids)
 
-        if molecule_name == 'monomer':
-            plt.plot(backbone.resids, rmsf_values, color=color, label=molecule_name)
+        # if not plot_mean:               
+        #     plt.plot(backbone.resids, rmsf_values, color=color, label=molecule_name)
 
-        if not plot_mean:               
-            plt.plot(backbone.resids, rmsf_values, color=color, label=molecule_name)
+        if plot_mean:
+            all_rmsf_values = [rmsf_dict[key] for key in rmsf_dict if key != 'monomer']
+            for res in range(len(rmsf_values)):
+                mean_rmsf.append(np.mean([res_rmsf[res] for res_rmsf in all_rmsf_values]))
+                sd_rmsf.append(np.std([res_rmsf[res] for res_rmsf in all_rmsf_values]))        
+                upper_limit.append(mean_rmsf[res] + sd_rmsf[res])
+                lower_limit.append(mean_rmsf[res] - sd_rmsf[res])
+                plt.plot(backbone.resids, mean_rmsf, linestyle=':', color='black', label='trimer')
+                plt.fill_between(backbone.resids, lower_limit, upper_limit, color='grey', alpha=0.5)
 
-        if plot_mean and molecule_name != 'monomer':
-            
-            all_rmsf_values.append(rmsf_values)
-            
+    if plot_diff:
+        if len(universe_dicts) == 2:
+            keys = list(rmsf_dict.keys())  # Extract keys
+            rmsf_values = (rmsf_dict[keys[0]]) / (rmsf_dict[keys[1]])
+            plt.plot(backbone.resids, rmsf_values, color='grey', label='RMSF difference')
+            plt.axhline(y=1, color='black', linestyle='--', linewidth=1)
+        else:
+            raise ValueError('Error: Cannot plot RMSF difference with less than two universes.')
 
-    for res in range(len(rmsf_values)):
-        mean_rmsf.append(np.mean([res_rmsf[res] for res_rmsf in all_rmsf_values]))
-        sd_rmsf.append(np.std([res_rmsf[res] for res_rmsf in all_rmsf_values]))        
-        upper_limit.append(mean_rmsf[res] + sd_rmsf[res])
-        lower_limit.append(mean_rmsf[res] - sd_rmsf[res])
-    plt.plot(backbone.resids, mean_rmsf, linestyle=':', color='black', label='trimer')
-    plt.fill_between(backbone.resids, lower_limit, upper_limit, color='grey', alpha=0.5)
-
-
-    Cu_cite_type1 = [134, 175, 183, 188]
-    Cu_cite_type2 = [139, 174, 329]
+    Cu_cite_type1 = [86, 135, 127, 140]
+    Cu_cite_type2 = [91, 126, 281]
     Cu_cite_color = 'orangered'
 
     for i, residue in enumerate(Cu_cite_type1):
@@ -230,19 +206,27 @@ def rmsf_plot(*universe_dicts, start_res=None, end_res=None, plot_mean=False):
         else:
             plt.axvline(x=residue, color=Cu_cite_color, linewidth=1.5)
 
-    for i, residue in enumerate(Cu_cite_type2):
-        if i == 0:
-            plt.axvline(x=residue, color=Cu_cite_color, linestyle='--', linewidth=2, label='Cu site type II')
-        else:
-            plt.axvline(x=residue, color=Cu_cite_color, linestyle='--', linewidth=2)
-                
-        if len(universe_dicts) > 1:
-            plt.legend(frameon=False, fontsize='8')
-        
+    # for i, residue in enumerate(Cu_cite_type2):
+    #     if i == 0:
+    #         plt.axvline(x=residue, color=Cu_cite_color, linestyle='--', linewidth=2, label='Cu site type II')
+    #     else:
+            # plt.axvline(x=residue, color=Cu_cite_color, linestyle='--', linewidth=2)
+
+    if len(universe_dicts) > 1:
+        plt.legend(frameon=False, fontsize='8', loc="upper left")
     plt.xlabel('Residue number')
     plt.ylabel('RMSF ($\AA$)')
     plt.show()
-
+    plt.savefig(f'{molecule_name}_{alignment}_rmsf.png')
+#%%
+# Create the PDB file with added temperature factors to color resdiues by RMSF
+def color_residues_by_rmsf(universe, start_res, end_res):
+    rmsf_values = rmsf_plot(universe, start_res, end_res)
+    universe.add_TopologyAttr('tempfactors') # add empty attribute for all atoms
+    protein = universe.select_atoms(f'protein and resid {start_res}-{end_res}') # select protein atoms
+    for residue, r_value in zip(protein.residues, rmsf_values):
+        residue.atoms.tempfactors = r_value
+    universe.atoms.write('results/rmsf_tempfactors.pdb')
 #%%
 def pairwise_rmsd(universe_dict):
     # timestep in ps is the time between two frames. It used to be 0.002 x 10000 (nstxout) = 20 ps in the simulation.
@@ -266,6 +250,7 @@ def pairwise_rmsd(universe_dict):
         plt.xlabel(r'Time ($\mu$s)')
         plt.colorbar(label=r'RMSD ($\AA$)')
         plt.show() 
+        # plt.savefig(f'{molecule}_{}_pairwise_rmsd.png')
 #%%
 def tml_plot(file_path, universe_dict, aggregated = False):
 
@@ -356,21 +341,31 @@ def open_hbond(filenames):
                     data.append([donor, acceptor, occupancy])  
         hbond_df = pd.DataFrame(data, columns=['Donor', 'Acceptor', chain])
         hbond_dfs.append(hbond_df)
+#%%
+def hbond_analysis(universe_dicts):
+    for u in universe_dicts:
+        molecule_name, universe = next(iter(u.items()))
+        hbonds = mda.analysis.hbonds.HydrogenBondAnalysis(universe, 'protein', 'protein', distance=3.0, angle=120.0)
+        hbonds.run()
+        hbonds.generate_table()
+        hbonds.table.to_csv(f'{molecule_name}_hbonds.csv')
+        print(f'{molecule_name} hydrogen bond analysis completed.')
 
 #%%
 def pca_prep(*universe_discts, end_res):
     frames = []
     CA_noh_res53 = {}
     aligned_CA_noh_res53 = {}
+    os.chdir('/home/pghw87/Documents/md-sim/5ue6/analysis')
     
     for u_dict in universe_discts: 
         molecule_name, universe = next(iter(u_dict.items()))
 
         u_CA_noh_res53 = universe.select_atoms(f'protein and name CA and not name H and resid 53:{end_res}')
         # Write the topology file
-        u_CA_noh_res53.write(f'data/{molecule_name}_CA_noh_res53.pdb')
+        u_CA_noh_res53.write(f'{molecule_name}_CA_noh_res53.pdb')
         # Write the trajectory file
-        with MDAnalysis.Writer(f'data/{molecule_name}_CA_noh_res53.xtc', u_CA_noh_res53.n_atoms) as W:
+        with MDAnalysis.Writer(f'{molecule_name}_CA_noh_res53.xtc', u_CA_noh_res53.n_atoms) as W:
             for ts in universe.trajectory:
                 W.write(u_CA_noh_res53)
         # Load the universe for CA-noh residues 53-362  
@@ -396,7 +391,7 @@ def pca_prep(*universe_discts, end_res):
     
     filename = ''.join([name for name in CA_noh_res53.keys()]) + '.pdb'
 
-    with MDAnalysis.Writer(f'data/{filename}') as W:
+    with MDAnalysis.Writer(f'{filename}') as W:
         for ts in multi_pdb.trajectory:
             W.write(multi_pdb)
     
@@ -405,8 +400,8 @@ def pca_prep(*universe_discts, end_res):
 
 #%%
 def pca_analysis(multi_pdb, n_components, monomer_frames=None, chainA_frames=None,
-                 chainB_frames=None, chainC_frames=None, elbow_plot=False, show_sequence=False):
-    os.chdir('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC')
+                 chainB_frames=None, chainC_frames=None, CU_frames=None, elbow_plot=False, show_sequence=False):
+    os.chdir('/home/pghw87/Documents/md-sim/5ue6/analysis')
     M = bb.Molecule()
     M.import_pdb(multi_pdb)
     #how to select residue in Biobox?
@@ -440,14 +435,19 @@ def pca_analysis(multi_pdb, n_components, monomer_frames=None, chainA_frames=Non
     if chainC_frames:
         indices['chainC'] = np.arange(start, start + chainC_frames)
         start += chainC_frames
+    
+    if CU_frames:
+        indices['CU'] = np.arange(start, start + chainC_frames)
+        start += chainC_frames
 
     # Create labels and colors
-    # labels = np.concatenate([np.full(len(indices[key]), key) for key in indices.keys()])
+    labels = np.concatenate([np.full(len(indices[key]), key) for key in indices.keys()])
     color_map = {
         'monomer': 'purple' if not show_sequence else cm.RdPu,
         'chainA': 'darkcyan' if not show_sequence else cm.Blues,
         'chainB': 'yellowgreen' if not show_sequence else cm.YlGn,
-        'chainC': 'chocolate' if not show_sequence else cm.Oranges
+        'chainC': 'chocolate' if not show_sequence else cm.Oranges,
+        'CU': 'maroon' if not show_sequence else cm.Reds
     }
 
     for label, idx_array in indices.items():
@@ -459,22 +459,30 @@ def pca_analysis(multi_pdb, n_components, monomer_frames=None, chainA_frames=Non
             color = color_map[label]
             plt.scatter(projection[idx_array, 0], projection[idx_array, 1], c=color, label=label)
 
-    # # Generate legend patches
-    # legend_patches = [mpatches.Patch(color=color_map[label] if not show_sequence else color_map[label](0.6), label=label) for label in indices.keys()]
-    # plt.legend(handles=legend_patches, frameon=False)
+    # Generate legend patches
+    legend_patches = [mpatches.Patch(color=color_map[label] if not show_sequence else color_map[label](0.6), label=label) for label in indices.keys()]
+    plt.legend(handles=legend_patches, frameon=False)
     
     # Add axis labels with explained variance
     plt.xlabel(f'PC1 ({round(pc[1].explained_variance_ratio_[0] * 100, 1)}%)')
     plt.ylabel(f'PC2 ({round(pc[1].explained_variance_ratio_[1] * 100, 1)}%)')
     plt.show()
 #%%
-monomer_dict_domain = load_universe('monomer', '5ue6_newbox.gro', 'final_center.xtc', 
-                             alignment='domain', stride_step = 200)
+monomer_dict_domain = load_universe('monomer', 'monomer_fixed.gro', 'monomer_1mis.xtc', 
+                             alignment='domain', stride_step = 10)
 monomer_domain = monomer_dict_domain.get('monomer')
 #%%
-monomer_dict_all = load_universe('monomer', '5ue6_newbox.gro', 'final_center.xtc',
+monomer_dict_all = load_universe('monomer', 'monomer_fixed.gro', 'monomer_1mis.xtc',
                             alignment='all', stride_step = 100)
 monomer_all = monomer_dict_all.get('monomer')
+#%%
+mon_CU_dict_domain = load_universe('CU_type1', top_file='5ue6_corrected.gro', trj_file='md_center_protein.dcd',
+                            alignment='domain', stride_step= 10)
+mon_CU_domain = monomer_dict_domain.get('monomer')
+
+mon_CU_dict_all = load_universe('CU_type1', top_file='5ue6_corrected.gro', trj_file='md_center_protein.dcd',
+                            alignment='all', stride_step= 10)
+mon_CU_all = monomer_dict_all.get('monomer')
 #%%
 trimer_dict_domain = load_universe('trimer', 'ABC_newbox.gro', 'final_cluster.xtc', 
                               alignment='domain', stride_step = 100)
@@ -508,7 +516,9 @@ chainC_dict_all = load_universe('chainC', 'chainC.gro', 'chainC_cluster.xtc',
                               alignment='all', stride_step = 100)
 chainC_all = chainC_dict_all.get('chainC')
 #%%
-rmsd_plot(monomer_dict_all, trimer_dict_all, monomer_dict_domain, trimer_dict_domain)
+rmsd_plot(mon_CU_dict_domain, monomer_dict_domain)
+#%%
+rmsd_plot(mon_CU_dict_all, mon_CU_dict_domain)
 #%%
 rmsd_plot(monomer_dict_domain, chainA_dict_domain, chainB_dict_domain, chainC_dict_domain)
 #%%
@@ -516,32 +526,50 @@ rmsd_plot(monomer_dict_domain, chainA_dict_domain, chainB_dict_domain, chainC_di
 rmsd_plot(monomer_domain, chainA_domain, chainB_domain, chainC_domain,
             colors = ['purple', 'darkcyan', 'yellowgreen', 'chocolate'], start_res=[53,53,53,53], end_res=[349,349,349,349])
 #%%
-pairwise_rmsd(monomer_dict_all_aligned)
-pairwise_rmsd(trimer_dict_all_aligned)
+pairwise_rmsd(monomer_dict_all)
+pairwise_rmsd(trimer_dict_all)
 #%%
-rmsf_plot(monomer_dict_domain_aligned, chainA_dict_domain_aligned, chainB_dict_domain_aligned, chainC_dict_domain_aligned,
+rmsf_plot(monomer_dict_domain, chainA_dict_domain, chainB_dict_domain, chainC_dict_domain,
            start_res=53, end_res=349, plot_mean=True)
 #%%
-rmsf_plot(monomer_dict_domain_aligned,
-           start_res=53, end_res=362, plot_mean=False)
+rmsf_plot(mon_CU_dict_all, monomer_dict_all, start_res=7, end_res=300, plot_mean=False)
 #%%
 tml_plot('/home/pghw87/Documents/md-sim/5ue6/monomer/monomer/vmd_analysis/mon-200dt-17ms.tml', monomer_dict_all, aggregated=True)
 #%%
 tml_plot('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/vmd_analysis/chainA-100dt-12ms.tml', chainA_dict_all, aggregated=True)
 #%%
-pca_prep(monomer_dict_all_aligned, end_res=362)
+pca_prep(monomer_dict_all, end_res=362)
 #%%
-pca_prep(chainA_dict_all_aligned, chainB_dict_all_aligned, chainC_dict_all_aligned)
-pca_prep(monomer_dict_all_aligned, chainA_dict_all_aligned, chainB_dict_all_aligned, chainC_dict_all_aligned)
+pca_prep(chainA_dict_all, chainB_dict_all, chainC_dict_all, end_res=362)
+pca_prep(monomer_dict_all, chainA_dict_all, chainB_dict_all, chainC_dict_all, end_res=362)
 #%%
 pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomer.pdb',
-             n_components = 2, monomer_frames=3473, show_sequence=True)
+             n_components = 2, monomer_frames=2041, show_sequence=True)
 # %%
 pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomerchainAchainBchainC.pdb', n_components = 2,
-             monomer_frames=3473, chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
+             monomer_frames=2041, chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
 #%%
 pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/chainAchainBchainC.pdb', n_components = 2,
              chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
+#%%
+pca_analysis('monomer_CU_CA_noh_res53.pdb', n_components= 2, monomer_frames=2041,CU_frames=1642, show_sequence=True)
+# %%
+pca_prep(monomer_dict_domain, end_res=349)
+#%%
+pca_prep(chainA_dict_domain, chainB_dict_domain, chainC_dict_domain, end_res=349)
+pca_prep(monomer_dict_domain, chainA_dict_domain, chainB_dict_domain, chainC_dict_domain, end_res=349)
+#%%
+pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomer.pdb',
+             n_components = 2, monomer_frames=1021, show_sequence=True)
+# %%
+pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomerchainAchainBchainC.pdb', n_components = 2,
+             monomer_frames=1021, chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
+#%%
+pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/chainAchainBchainC.pdb', n_components = 2,
+             chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
+#%%
+pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomerchainC.pdb', n_components = 2,
+             monomer_frames=1021, chainC_frames=1210, show_sequence=True)
 # %%
 cmap = cm.get_cmap('RdPu')
 position = 0.6  # Example position (50% through the colormap)
@@ -561,4 +589,31 @@ pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomer.pdb',
 #%%
 pca_analysis('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC/monomerchainAchainBchainC.pdb', n_components = 2,
              monomer_frames=3473, chainA_frames=1210, chainB_frames=1210, chainC_frames=1210, show_sequence=True)
+# %%
+os.chdir('/home/pghw87/Documents/md-sim/5ue6/trimer/ABC/ABC')
+column_5_values = []
+
+# Open the input PDB file
+with open('diff_tempfactors.pdb', 'r') as pdb:
+    for line in pdb:
+        # Split the line into columns based on whitespace
+        columns = line.split()
+        
+        # Check if the line has at least 5 columns
+        if len(columns) >= 11:
+            # Extract the value in the 5th column
+            value = columns[10]
+            
+            # Append the value to the list
+            column_5_values.append(value)
+
+# Print the values to verify
+for value in column_5_values:
+    print(value)
+# %%
+unique_sorted_values = sorted(set(column_5_values))
+
+# Print sorted unique values
+for value in unique_sorted_values:
+    print(value)
 # %%

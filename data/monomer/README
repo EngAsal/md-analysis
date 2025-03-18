@@ -1,0 +1,12 @@
+Created 12 March 2024
+
+1. 5ue6.pdb is downloaded from PDB and cleaned using grep -v HETATM and grep -v CONECT
+2. chain A is copied into a seperate PDB file .
+3. The topology is generated using pdb2gmx with TIP3P water model and amber14sb ff, resulting in 5ue6_newbox.gro
+   topology contains all the information required to define a molecule in a simulation: nonbonded (atom type and charge) and bonded (bpnds, angles, dihedrals, and connectivity)
+4. The system is solvated and the ions are added.
+5. Energy of the system is minimized.
+6. The temperature and pressure of the system is equilibrated.
+7. Production run is performed for 20 microseconds 
+8. The protein is centered and accounted for periodicity using gmx trjconv, resulting in final_center.xtc
+9. The residues in topology (editconf) and trajectory (trjconv) files are renumbered to start from 1, resulting in monomer1.gro and monomer.xtc
